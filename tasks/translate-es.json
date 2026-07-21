@@ -1,0 +1,66 @@
+{
+  "name": "translate-es",
+  "description": "App localization: translate a fitness app's UI-strings JSON into Spanish, preserving structure (JSON in, JSON out)",
+  "maxOutputTokens": 2000,
+  "messages": [
+    {
+      "role": "user",
+      "content": "You are a professional app localization specialist.\n\nTask:\nTranslate the provided English UI content into Spanish (es-ES).\n\nContext:\nThe input contains user-facing strings from a mobile fitness app: screen labels, notifications, and subscription copy. The audience is general consumers.\n\nRules:\n- Sound natural and fluent in Spanish; keep strings concise and suitable for UI.\n- Do NOT translate JSON keys, enum values (FREE, PRO, TRIAL), placeholders like {count} or {name}, numbers, or the brand name \"StrideUp\".\n- Return the SAME JSON structure with translated user-visible values.\n- The FIRST character of your reply must be \"{\" and the LAST must be \"}\".\n- No markdown fences, no explanations, no reordering, valid UTF-8 JSON.\n\nNow translate the following into Spanish:\n\n{\"screens\":{\"home\":{\"title\":\"Good morning, {name}!\",\"subtitle\":\"You are {count} steps away from today's goal.\",\"cta\":\"Start a workout\"},\"history\":{\"title\":\"Your activity\",\"empty_state\":\"No workouts yet. Your finished sessions will show up here.\",\"filter_label\":\"Filter by activity type\"}},\"notifications\":{\"streak_reminder\":\"Don't break your {count}-day streak — a quick 10-minute walk counts too.\",\"goal_reached\":\"Goal reached! You hit your daily target of {count} steps.\",\"inactive_nudge\":\"You've been sitting for a while. Time to stretch your legs?\"},\"subscription\":{\"tier\":\"PRO\",\"headline\":\"Train smarter with StrideUp PRO\",\"benefits\":[\"Personalized training plans\",\"Advanced heart-rate insights\",\"Ad-free experience\"],\"disclaimer\":\"Subscription renews automatically. Cancel anytime in settings.\"}}"
+    }
+  ],
+  "responseSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["screens", "notifications", "subscription"],
+    "properties": {
+      "screens": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["home", "history"],
+        "properties": {
+          "home": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["title", "subtitle", "cta"],
+            "properties": {
+              "title": { "type": "string" },
+              "subtitle": { "type": "string" },
+              "cta": { "type": "string" }
+            }
+          },
+          "history": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["title", "empty_state", "filter_label"],
+            "properties": {
+              "title": { "type": "string" },
+              "empty_state": { "type": "string" },
+              "filter_label": { "type": "string" }
+            }
+          }
+        }
+      },
+      "notifications": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["streak_reminder", "goal_reached", "inactive_nudge"],
+        "properties": {
+          "streak_reminder": { "type": "string" },
+          "goal_reached": { "type": "string" },
+          "inactive_nudge": { "type": "string" }
+        }
+      },
+      "subscription": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["tier", "headline", "benefits", "disclaimer"],
+        "properties": {
+          "tier": { "type": "string" },
+          "headline": { "type": "string" },
+          "benefits": { "type": "array", "items": { "type": "string" } },
+          "disclaimer": { "type": "string" }
+        }
+      }
+    }
+  }
+}
