@@ -1,0 +1,31 @@
+{
+  "name": "classify-tickets",
+  "description": "Classification: label support tickets with category and sentiment as strict JSON",
+  "maxOutputTokens": 500,
+  "messages": [
+    {
+      "role": "user",
+      "content": "Classify each support ticket below. For each, produce an object {id, category, sentiment} where category is one of BILLING, BUG, FEATURE_REQUEST, ACCOUNT, OTHER and sentiment is one of POSITIVE, NEUTRAL, NEGATIVE.\n\nReturn a JSON object with a \"results\" array holding these objects in the same order.\n\nTickets:\n\n[T-101] I was charged twice this month, please refund one of the payments.\n[T-102] The export button does nothing when I click it on Safari.\n[T-103] Loving the new dashboard! Would be great to have a dark mode too.\n[T-104] How do I change the email address on my account?\n[T-105] Your service has been down for two hours and I'm losing customers. Unacceptable.\n[T-106] What are your office hours over the holidays?"
+    }
+  ],
+  "responseSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["results"],
+    "properties": {
+      "results": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "category", "sentiment"],
+          "properties": {
+            "id": { "type": "string" },
+            "category": { "type": "string", "enum": ["BILLING", "BUG", "FEATURE_REQUEST", "ACCOUNT", "OTHER"] },
+            "sentiment": { "type": "string", "enum": ["POSITIVE", "NEUTRAL", "NEGATIVE"] }
+          }
+        }
+      }
+    }
+  }
+}

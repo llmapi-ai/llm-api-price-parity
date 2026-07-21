@@ -1,0 +1,16 @@
+{
+  "$comment": "Published per-token prices, pinned. Both sides of every comparison are priced from THIS table — never from a vendor dashboard. Update via PR so price changes are visible in git history.",
+  "retrieved": "2026-07-21",
+  "unit": "USD per 1M tokens",
+  "sources": {
+    "openai": "https://platform.openai.com/docs/pricing"
+  },
+  "models": {
+    "gpt-5.5": { "provider": "openai", "input": 5.0, "cachedInput": 0.5, "output": 30.0 },
+    "gpt-5.4": { "provider": "openai", "input": 2.5, "cachedInput": 0.25, "output": 15.0 },
+    "gpt-5.4-mini": { "provider": "openai", "input": 0.75, "cachedInput": 0.07, "output": 4.5 },
+    "gpt-5.4-nano": { "provider": "openai", "input": 0.2, "cachedInput": 0.02, "output": 1.25 },
+    "gpt-5.2": { "provider": "openai", "input": 1.75, "cachedInput": 0.175, "output": 14.0 },
+    "gpt-5.1": { "provider": "openai", "input": 1.25, "cachedInput": 0.125, "output": 10.0 }
+  }
+}
