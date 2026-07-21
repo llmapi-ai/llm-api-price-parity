@@ -1,0 +1,37 @@
+{
+  "name": "llm-price-parity",
+  "version": "0.1.0",
+  "description": "A deterministic benchmark comparing LLM API's per-token cost against the direct provider APIs.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "llm-price-parity": "dist/cli.js"
+  },
+  "scripts": {
+    "bench": "tsx src/cli.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "llm",
+    "benchmark",
+    "pricing",
+    "openai",
+    "gateway",
+    "tokens"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "esbuild@0.21.5": true
+  }
+}
