@@ -61,10 +61,22 @@ export interface RunResult {
   repeat: number;
   latencyMs: number;
   usage: Usage;
-  /** Cost computed by US from usage × prices.json — same math for both sides. */
-  computedCostUSD: number;
-  /** Cost the gateway claims it billed (sum of usage.cost_usd_* fields), if present. */
+  /**
+   * direct: cost computed by the TEST from usage tokens × prices.json list rates.
+   * gateway: cost the gateway's response itself reports (sum of usage.cost_usd_*
+   * fields — the price OUR API showed the client). null when the gateway omitted
+   * the cost fields (an unpriced request — itself a finding).
+   */
+  computedCostUSD: number | null;
+  /**
+   * What the billing pipeline actually recorded: ClickHouse `log.cost` for this
+   * request id, resolved AFTER the runs (the gateway → Redpanda → ClickHouse
+   * pipeline lags by seconds). null for direct rows, when CLICKHOUSE_URL is not
+   * configured, or when the row never appeared.
+   */
   billedCostUSD: number | null;
+  /** Response `id` — the gateway's request id, used to find the billing row. */
+  requestID: string;
   finishReason: string;
   truncated: boolean;
   requestBody: Record<string, unknown>;
@@ -77,7 +89,8 @@ export interface SideStats {
   medCached: number;
   medOutput: number;
   medReasoning: number;
-  medCost: number;
+  /** Median of computedCostUSD; null when no run produced a cost (gateway omitted cost fields). */
+  medCost: number | null;
   medBilled: number | null;
   medLatencyMs: number;
 }
@@ -87,13 +100,22 @@ export interface PairSummary {
   task: string;
   direct: SideStats;
   gateway: SideStats;
-  /** (gateway computed cost − direct computed cost) / direct, in % */
+  /** (gateway response cost − direct list cost) / direct, in % — a discount shows as negative. */
   costDeltaPct: number;
-  /** Gateway is not materially more expensive than direct (one-directional). */
+  /**
+   * (ClickHouse-billed cost − gateway response cost) / response cost, in % —
+   * the respond↔billing gap. null when either side is unavailable. Anything
+   * beyond rounding (±1%) means the client saw one price and was billed another.
+   */
+  ledgerDeltaPct: number | null;
+  /** Gateway response cost is not materially above direct list price (one-directional). */
   costParity: boolean;
   /** No categorical reasoning on/off mismatch between the two sides. */
   reasoningParity: boolean;
-  /** null when the gateway did not report billed cost */
+  /**
+   * Response ↔ ledger match: gateway's cost_usd_* equals the ClickHouse-billed
+   * cost (symmetric ±1%). null when either side is unavailable.
+   */
   billingParity: boolean | null;
   /**
    * Informational only: raw token counts drifted beyond noise between the two

@@ -2,7 +2,10 @@ import type { Task, Usage } from "./types.js";
 
 export interface CallOutcome {
   usage: Usage;
-  billedCostUSD: number | null;
+  /** Sum of the response's own cost_usd_* fields — what the API said it charged. null when absent (direct OpenAI). */
+  apiReportedCostUSD: number | null;
+  /** Response `id`; for the gateway this is its request id (matches the billing log row). */
+  requestID: string;
   latencyMs: number;
   finishReason: string;
   text: string;
@@ -217,7 +220,8 @@ export async function callOpenAICompatible(
   const choice = (json.choices as { message?: { content?: string }; finish_reason?: string }[] | undefined)?.[0];
   return {
     usage: normalizeOpenAIUsage(usage),
-    billedCostUSD: billedFromUsage(usage as Record<string, unknown>),
+    apiReportedCostUSD: billedFromUsage(usage as Record<string, unknown>),
+    requestID: typeof json.id === "string" ? json.id : "",
     latencyMs,
     finishReason: choice?.finish_reason ?? "unknown",
     text: choice?.message?.content ?? "",

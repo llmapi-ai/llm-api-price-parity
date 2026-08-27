@@ -45,14 +45,14 @@ export function withinTokenTolerance(direct: number, gateway: number): boolean {
 }
 
 /**
- * Billing check: the gateway must not bill MORE than published per-token rates
- * (a markup). Billing at or below — list price, or any volume discount — passes.
- * One-directional, matching cost parity; the 1% slack absorbs rounding in the
- * gateway's cost fields.
+ * Ledger check: the cost the gateway SHOWED in the response (cost_usd_*) must
+ * equal the cost the billing pipeline RECORDED (ClickHouse log.cost). A
+ * mismatch in either direction is a respond↔billing desync, so the check is
+ * symmetric; the 1% slack absorbs float rounding on the wire.
  */
 export function withinBillingTolerance(computed: number, billed: number): boolean {
-  if (computed === 0) return billed <= 0;
-  return (billed - computed) / computed <= 0.01;
+  if (computed === 0) return billed === 0;
+  return Math.abs(billed - computed) / computed <= 0.01;
 }
 
 /**

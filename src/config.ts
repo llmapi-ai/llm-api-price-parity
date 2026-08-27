@@ -18,6 +18,9 @@ export interface Env {
   openaiKey: string | undefined;
   gatewayKey: string | undefined;
   gatewayBaseUrl: string;
+  /** ClickHouse of the gateway's billing pipeline; unset disables the "$ billed" column. */
+  clickhouseUrl: string | undefined;
+  clickhouseDb: string;
 }
 
 /** Minimal .env loader — real env vars always win. No dependency needed. */
@@ -42,5 +45,7 @@ export function readEnv(): Env {
     openaiKey: process.env.OPENAI_API_KEY,
     gatewayKey: process.env.LLMAPI_API_KEY,
     gatewayBaseUrl: process.env.LLMAPI_BASE_URL ?? "https://api.llmapi.ai/v1",
+    clickhouseUrl: process.env.CLICKHOUSE_URL,
+    clickhouseDb: process.env.CLICKHOUSE_DATABASE ?? "llmgateway",
   };
 }

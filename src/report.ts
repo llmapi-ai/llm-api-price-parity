@@ -49,16 +49,17 @@ export function renderConsole(summaries: PairSummary[], prices: PriceTable, repe
         String(side.medInput),
         String(side.medOutput),
         side.medReasoning > 0 ? yellow(String(side.medReasoning)) : dim("0"),
-        money(side.medCost),
+        side.medCost === null ? dim("—") : money(side.medCost),
         side.medBilled === null ? dim("—") : money(side.medBilled),
         first ? "" : colorDelta(s.costDeltaPct),
+        first ? "" : colorLedgerDelta(s.ledgerDeltaPct),
         `${Math.round(side.medLatencyMs)}ms`,
       ]);
     }
   }
   out.push(
     renderTable(
-      ["model", "task", "via", "in", "out", "reasoning", "$ computed", "$ billed", "Δ cost", "latency"],
+      ["model", "task", "via", "in", "out", "reasoning", "$ computed", "$ billed", "Δ cost", "Δ ledger", "latency"],
       rows,
     ),
   );
@@ -66,10 +67,10 @@ export function renderConsole(summaries: PairSummary[], prices: PriceTable, repe
 
   for (const s of summaries) {
     const name = `${s.matchup} × ${s.task}`;
-    out.push(verdictLine(s.costParity, `${name}: cost parity`, `gateway costs ${pct(s.costDeltaPct)} vs direct for the same request`));
+    out.push(verdictLine(s.costParity, `${name}: cost parity`, s.gateway.medCost === null ? "gateway response carried no cost_usd_* fields (unpriced request)" : `gateway response cost is ${pct(s.costDeltaPct)} vs direct list price`));
     out.push(verdictLine(s.reasoningParity, `${name}: reasoning parity`, "reasoning is on for one side and off for the other (a hidden-default mismatch)"));
     if (s.billingParity !== null) {
-      out.push(verdictLine(s.billingParity, `${name}: billing parity`, "gateway billed cost exceeds published per-token rates (a markup)"));
+      out.push(verdictLine(s.billingParity, `${name}: billing parity`, "ClickHouse-billed cost diverges from the response's cost_usd_* (respond↔billing desync)"));
     }
     if (s.tokenDrift) {
       out.push(dim(`  · ${name}: token counts drift between the two API surfaces (informational; gateway is ${pct(s.costDeltaPct)} on cost)`));
@@ -85,7 +86,7 @@ export function renderConsole(summaries: PairSummary[], prices: PriceTable, repe
   );
   out.push(
     allPass
-      ? green(bold("  ✓ PARITY — gateway is at or below direct-provider cost, billed at published rates"))
+      ? green(bold("  ✓ PARITY — gateway response cost is at or below direct list price and matches the billing ledger"))
       : red(bold("  ✗ DIVERGENCE — see failing checks above")),
   );
   out.push("");
@@ -97,6 +98,14 @@ function colorDelta(deltaPct: number): string {
   if (Math.abs(deltaPct) <= 2) return green(text);
   if (deltaPct > 0) return red(text);
   return green(text);
+}
+
+// The ledger delta is a strict-equality check (respond == billing), so unlike
+// colorDelta a negative gap is NOT fine — anything beyond rounding is red.
+function colorLedgerDelta(deltaPct: number | null): string {
+  if (deltaPct === null) return dim("—");
+  const text = pct(deltaPct);
+  return Math.abs(deltaPct) <= 1 ? green(text) : red(text);
 }
 
 function verdictLine(ok: boolean, label: string, failHint: string): string {
@@ -118,12 +127,13 @@ export function renderMarkdown(
   lines.push(`- reasoning_effort (OpenAI-family): \`${reasoningEffort}\``);
   lines.push(`- Prices pinned: ${prices.retrieved} (${Object.values(prices.sources).join(", ")})`);
   lines.push("");
-  lines.push("| model | task | via | input | output | reasoning | $ computed | $ billed | Δ cost |");
-  lines.push("|---|---|---|---:|---:|---:|---:|---:|---:|");
+  lines.push("| model | task | via | input | output | reasoning | $ computed | $ billed | Δ cost | Δ ledger |");
+  lines.push("|---|---|---|---:|---:|---:|---:|---:|---:|---:|");
   for (const s of summaries) {
     for (const [label, side] of [["direct", s.direct], ["gateway", s.gateway]] as const) {
+      const ledgerCell = s.ledgerDeltaPct === null ? "—" : pct(s.ledgerDeltaPct);
       lines.push(
-        `| ${s.matchup} | ${s.task} | ${label} | ${side.medInput} | ${side.medOutput} | ${side.medReasoning} | ${money(side.medCost)} | ${side.medBilled === null ? "—" : money(side.medBilled)} | ${label === "gateway" ? pct(s.costDeltaPct) : ""} |`,
+        `| ${s.matchup} | ${s.task} | ${label} | ${side.medInput} | ${side.medOutput} | ${side.medReasoning} | ${side.medCost === null ? "—" : money(side.medCost)} | ${side.medBilled === null ? "—" : money(side.medBilled)} | ${label === "gateway" ? pct(s.costDeltaPct) : ""} | ${label === "gateway" ? ledgerCell : ""} |`,
       );
     }
   }
@@ -132,10 +142,10 @@ export function renderMarkdown(
   lines.push("");
   for (const s of summaries) {
     const name = `${s.matchup} × ${s.task}`;
-    lines.push(`- ${s.costParity ? "✅" : "❌"} \`${name}\` cost parity (gateway ${pct(s.costDeltaPct)} vs direct)`);
+    lines.push(`- ${s.costParity ? "✅" : "❌"} \`${name}\` cost parity (gateway response cost ${pct(s.costDeltaPct)} vs direct list)`);
     lines.push(`- ${s.reasoningParity ? "✅" : "❌"} \`${name}\` reasoning parity (no on/off mismatch)`);
     if (s.billingParity !== null) {
-      lines.push(`- ${s.billingParity ? "✅" : "❌"} \`${name}\` billing parity (gateway billed at or below published rates)`);
+      lines.push(`- ${s.billingParity ? "✅" : "❌"} \`${name}\` billing parity (response cost_usd_* matches the ClickHouse ledger)`);
     }
     if (s.tokenDrift) lines.push(`- ℹ️ \`${name}\` token counts drift between API surfaces (informational)`);
     if (s.truncated) lines.push(`- ⚠️ \`${name}\` had truncated runs`);

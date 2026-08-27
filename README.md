@@ -10,14 +10,14 @@ Same request, same pinned parameters, same published prices — so any cost diff
 ![Zero runtime dependencies](https://img.shields.io/badge/runtime%20deps-0-blueviolet)
 
 ```
-┌──────────────┬──────────────┬─────────┬─────┬─────┬───────────┬────────────┬───────────┬────────┬─────────┐
-│ model        │ task         │ via     │ in  │ out │ reasoning │ $ computed │ $ billed  │ Δ cost │ latency │
-├──────────────┼──────────────┼─────────┼─────┼─────┼───────────┼────────────┼───────────┼────────┼─────────┤
-│ gpt-5.2      │ translate-es │ direct  │ 511 │ 216 │ 0         │ $0.003918  │ —         │        │ 4764ms  │
-│              │              │ gateway │ 511 │ 215 │ 0         │ $0.003904  │ $0.003904 │ -0.36% │ 4437ms  │
-│ gpt-5.4-nano │ translate-es │ direct  │ 511 │ 217 │ 0         │ $0.000373  │ —         │        │ 2352ms  │
-│              │              │ gateway │ 511 │ 215 │ 0         │ $0.000371  │ $0.000371 │ -0.67% │ 3398ms  │
-└──────────────┴──────────────┴─────────┴─────┴─────┴───────────┴────────────┴───────────┴────────┴─────────┘
+┌──────────────┬──────────────┬─────────┬─────┬─────┬───────────┬────────────┬───────────┬─────────┬──────────┬─────────┐
+│ model        │ task         │ via     │ in  │ out │ reasoning │ $ computed │ $ billed  │ Δ cost  │ Δ ledger │ latency │
+├──────────────┼──────────────┼─────────┼─────┼─────┼───────────┼────────────┼───────────┼─────────┼──────────┼─────────┤
+│ gpt-5.2      │ translate-es │ direct  │ 511 │ 216 │ 0         │ $0.003918  │ —         │         │          │ 4764ms  │
+│              │              │ gateway │ 511 │ 215 │ 0         │ $0.002342  │ $0.002342 │ -40.22% │ +0.00%   │ 4437ms  │
+│ gpt-5.4-nano │ translate-es │ direct  │ 511 │ 217 │ 0         │ $0.000373  │ —         │         │          │ 2352ms  │
+│              │              │ gateway │ 511 │ 215 │ 0         │ $0.000223  │ $0.000223 │ -40.21% │ +0.00%   │ 3398ms  │
+└──────────────┴──────────────┴─────────┴─────┴─────┴───────────┴────────────┴───────────┴─────────┴──────────┴─────────┘
 
   ✓ gpt-5.2 × translate-es: cost parity
   ✓ gpt-5.2 × translate-es: reasoning parity
@@ -26,7 +26,7 @@ Same request, same pinned parameters, same published prices — so any cost diff
   ✓ gpt-5.4-nano × translate-es: reasoning parity
   ✓ gpt-5.4-nano × translate-es: billing parity
 
-  ✓ PARITY — gateway is at or below direct-provider cost, billed at published rates
+  ✓ PARITY — gateway response cost is at or below direct list price and matches the billing ledger
 ```
 
 ## Why this exists
@@ -40,22 +40,22 @@ A like-for-like comparison therefore has to control *everything*: the request bo
 1. **Byte-identical requests.** The only differences between the two requests in a comparison are the base URL, the auth header, and the model id prefix (`gpt-5.2` vs `openai/gpt-5.2`). Everything else — messages, sampling params, and the structured-output schema below — is identical. `--show-requests` prints both bodies so you can diff them yourself.
 2. **No provider defaults trusted.** Every parameter that affects token generation is pinned explicitly: `temperature 0`, `top_p 1`, a fixed `seed`, an output-token cap, and `reasoning_effort` sent explicitly to **both** sides.
 3. **Structured outputs pin the response shape.** Each task sends a strict JSON schema via `response_format: json_schema`, identical on both sides. Constrained decoding fixes the output *structure and whitespace*, so the same request produces the same token count run-to-run. Without this, a model that pretty-prints its JSON on one call and minifies it on the next makes cost swing tens of percent for no real reason — pure formatting noise, not a pricing difference.
-4. **One pricing table, both sides.** Costs are computed from each response's `usage` block using [prices.json](prices.json) — published provider rates, pinned with source links and a retrieval date, applied by the **same function** to both sides.
+4. **Three independent cost sources.** `$ computed` on the **direct** row is the test's own math: the response's `usage` tokens × [prices.json](prices.json) — published provider rates, pinned with source links and a retrieval date. `$ computed` on the **gateway** row is what the gateway's response itself reported (the sum of its `usage.cost_usd_*` fields — the price shown to the client). `$ billed` is what the billing pipeline actually recorded (see 6).
 5. **Reasoning tokens counted once, across differing conventions.** Reasoning bills at the plain output rate. Some APIs fold reasoning *into* `completion_tokens`; others report it *separately*. Output is derived convention-independently as `total_tokens − prompt_tokens`, so reasoning is counted exactly once on both sides — counting it twice (or comparing raw `completion_tokens` across the two) is a common token-accounting error.
-6. **Billed cost is cross-checked.** When the gateway self-reports what it billed (`usage.cost_usd_*` fields), that number is verified to **not exceed** published per-token rates. Billing at or below — list price, or any volume discount — passes; only a markup fails. This is a check matching token counts alone would not provide.
+6. **The ledger is cross-checked.** With `CLICKHOUSE_URL` set, the `$ billed` column is resolved from the gateway billing pipeline's ClickHouse `log` table by each response's request id (with retries — the pipeline lands rows seconds after the response). The response's self-reported cost must **match** the ledger within 1%, in either direction: showing the client one price and billing another is the exact bug class this check exists for. Without `CLICKHOUSE_URL` the column stays empty and the check is skipped.
 7. **Auditable.** Zero runtime dependencies, ~900 lines of TypeScript, raw per-run results dumped into every report.
 
 ## What it checks
 
 | Check | Question it answers | What a failure indicates |
 |---|---|---|
-| **Cost parity** | For the same request, does the gateway cost more than going direct? (one-directional — cheaper is fine) | The gateway costs more than the provider for the same request — e.g. from a differing reasoning default |
+| **Cost parity** | For the same request, does the gateway's reported cost exceed the direct list price? (one-directional — cheaper, e.g. a discount, is fine and shows as a negative Δ) | The gateway charges more than the provider's list for the same request — e.g. from a differing reasoning default or a markup |
 | **Reasoning parity** | Is reasoning on for one side but off for the other? | A reasoning on/off mismatch — one side spends reasoning tokens the other doesn't |
-| **Billing parity** | Does the gateway's self-reported billed cost stay at or below published per-token rates? | The billed rate exceeds the published per-token rates (a markup) |
+| **Billing parity** | Does the cost the response *showed* equal the cost the billing pipeline *recorded* (ClickHouse)? (symmetric ±1%) | A respond↔billing desync — the client sees one price and is billed another |
 
-All pass → the gateway costs at most what the provider would have for the same request. The process exits non-zero on any failure, so you can run it in CI.
+All pass → the gateway charges at most the provider's list price, and what it shows is what it bills. The process exits non-zero on any failure, so you can run it in CI.
 
-Scope: this isolates **per-token price** for a given model — that the gateway bills at the providers' published rates. Routing, caching, and volume discounts are separate mechanisms and out of scope here.
+Scope: this isolates the **price of a given request** — that the gateway's reported and billed costs agree and stay within published rates. Org discounts show up as a negative Δ cost; routing and caching are out of scope.
 
 **Why not require identical token counts?** Structured outputs make them nearly identical, but not exactly. Two sources of legitimate variance remain: free-text *content* inside the schema (e.g. how a translation is phrased varies by a few tokens), and — with reasoning on — the number of hidden reasoning tokens, which no seed controls. Cost parity absorbs that jitter (median + a 10% one-directional band) while still catching a real blow-up; reasoning parity catches the categorical on/off case. Any residual token drift is surfaced as an **informational** note, never a failure.
 
@@ -108,7 +108,7 @@ Three small, representative production workloads — all JSON-in/JSON-out, each 
 
 **Why medians and not means?** One retried or rate-limited outlier shouldn't decide the verdict.
 
-**Why does the gateway show a `$ billed` column but the direct side doesn't?** Direct provider responses don't include cost; their bill *is* published rate × usage, which is the `$ computed` column. The gateway additionally self-reports what it billed, so we can verify it against the same rates.
+**Why does the gateway show a `$ billed` column but the direct side doesn't?** `$ billed` is read from the gateway billing pipeline's ClickHouse by request id — only gateway requests have a row there. Direct provider responses carry no cost at all; their bill *is* published rate × usage, which is what the direct `$ computed` column shows.
 
 **Prices changed — is the benchmark wrong now?** Update `prices.json` in a PR. Pinning prices in git is deliberate: every historical report states which price sheet it used.
 

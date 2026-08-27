@@ -2,6 +2,7 @@
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { MATCHUPS, loadDotEnv, readEnv } from "./config.js";
+import { attachLedgerCosts } from "./ledger.js";
 import { loadPriceTable } from "./pricing.js";
 import { bold, dim, red, renderConsole, renderMarkdown, yellow } from "./report.js";
 import { runBenchmark, summarize } from "./runner.js";
@@ -117,6 +118,14 @@ async function main(): Promise<number> {
     prices,
     log: (line) => console.log(dim(line)),
   });
+
+  // "$ billed" comes from the billing pipeline's ClickHouse, not from the
+  // responses — resolve it now that all requests have been made.
+  if (env.clickhouseUrl) {
+    await attachLedgerCosts(results, env, (line) => console.log(dim(line)));
+  } else {
+    console.log(dim(`ledger: CLICKHOUSE_URL not set — "$ billed" stays empty and the billing-parity check is skipped`));
+  }
 
   if (values["show-requests"]) {
     const seen = new Set<string>();
