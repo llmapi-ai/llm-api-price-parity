@@ -45,17 +45,6 @@ export function withinTokenTolerance(direct: number, gateway: number): boolean {
 }
 
 /**
- * Billing check: the gateway must not bill MORE than published per-token rates
- * (a markup). Billing at or below — list price, or any volume discount — passes.
- * One-directional, matching cost parity; the 1% slack absorbs rounding in the
- * gateway's cost fields.
- */
-export function withinBillingTolerance(computed: number, billed: number): boolean {
-  if (computed === 0) return billed <= 0;
-  return (billed - computed) / computed <= 0.01;
-}
-
-/**
  * Price parity is a "gateway ≤ provider" promise, so the cost check is
  * one-directional: the gateway may not cost materially MORE than direct for the
  * same request; costing less is a pass, not a failure. The tolerance absorbs

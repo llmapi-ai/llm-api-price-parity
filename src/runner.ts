@@ -9,7 +9,6 @@ import {
   costUSD,
   median,
   reasoningRegimeMismatch,
-  withinBillingTolerance,
   withinCostParity,
   withinTokenTolerance,
 } from "./pricing.js";
@@ -44,8 +43,11 @@ function toResult(
     repeat,
     latencyMs: Math.round(outcome.latencyMs),
     usage: outcome.usage,
-    computedCostUSD: costUSD(price, outcome.usage),
-    billedCostUSD: outcome.billedCostUSD,
+    // direct: the test's own list-price math (tokens × prices.json) — the reference.
+    // gateway: the response's self-reported cost_usd_* sum — the actual price the
+    // API showed. A gateway response with no cost fields yields null, surfaced
+    // as a cost-parity failure rather than papered over.
+    computedCostUSD: target === "gateway" ? outcome.apiReportedCostUSD : costUSD(price, outcome.usage),
     finishReason: outcome.finishReason,
     truncated: TRUNCATED_REASONS.has(outcome.finishReason),
     requestBody: outcome.requestBody,
@@ -93,15 +95,14 @@ export async function runBenchmark(plan: RunPlan): Promise<RunResult[]> {
 }
 
 function sideStats(runs: RunResult[]): SideStats {
-  const billed = runs.map((r) => r.billedCostUSD).filter((v): v is number => v !== null);
+  const computed = runs.map((r) => r.computedCostUSD).filter((v): v is number => v !== null);
   return {
     runs,
     medInput: median(runs.map((r) => r.usage.inputTokens)),
     medCached: median(runs.map((r) => r.usage.cachedInputTokens)),
     medOutput: median(runs.map((r) => r.usage.outputTokens)),
     medReasoning: median(runs.map((r) => r.usage.reasoningTokens)),
-    medCost: median(runs.map((r) => r.computedCostUSD)),
-    medBilled: billed.length > 0 ? median(billed) : null,
+    medCost: computed.length > 0 ? median(computed) : null,
     medLatencyMs: median(runs.map((r) => r.latencyMs)),
   };
 }
@@ -114,20 +115,25 @@ export function summarize(results: RunResult[]): PairSummary[] {
     const runs = results.filter((r) => r.matchup === matchup && r.task === task);
     const direct = sideStats(runs.filter((r) => r.target === "direct"));
     const gateway = sideStats(runs.filter((r) => r.target === "gateway"));
+    // direct.medCost is never null (the test always computes it); gateway.medCost
+    // is null when the gateway omitted cost_usd_* — surfaced as a costParity fail
+    // below, since "no price shown" must not read as parity.
     const costDeltaPct =
-      direct.medCost > 0 ? ((gateway.medCost - direct.medCost) / direct.medCost) * 100 : 0;
+      direct.medCost !== null && direct.medCost > 0 && gateway.medCost !== null
+        ? ((gateway.medCost - direct.medCost) / direct.medCost) * 100
+        : 0;
+    const directTokens = direct.medInput + direct.medOutput;
+    const gatewayTokens = gateway.medInput + gateway.medOutput;
+    const tokenDeltaPct = directTokens > 0 ? ((gatewayTokens - directTokens) / directTokens) * 100 : 0;
     summaries.push({
       matchup,
       task,
       direct,
       gateway,
       costDeltaPct,
-      costParity: withinCostParity(costDeltaPct),
+      tokenDeltaPct,
+      costParity: gateway.medCost === null ? false : withinCostParity(costDeltaPct),
       reasoningParity: !reasoningRegimeMismatch(direct.medReasoning, gateway.medReasoning),
-      billingParity:
-        gateway.medBilled === null
-          ? null
-          : withinBillingTolerance(gateway.medCost, gateway.medBilled),
       tokenDrift:
         !withinTokenTolerance(direct.medInput, gateway.medInput) ||
         !withinTokenTolerance(direct.medOutput, gateway.medOutput),

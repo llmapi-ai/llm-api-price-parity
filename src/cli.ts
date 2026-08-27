@@ -143,9 +143,7 @@ async function main(): Promise<number> {
   writeFileSync(reportPath, renderMarkdown(summaries, results, prices, repeats, reasoningEffort));
   console.log(dim(`report written to results/report-${stamp}.md`));
 
-  const failed = summaries.some(
-    (s) => !s.costParity || !s.reasoningParity || s.billingParity === false,
-  );
+  const failed = summaries.some((s) => !s.costParity || !s.reasoningParity);
   return failed ? 2 : 0;
 }
 

@@ -2,7 +2,8 @@ import type { Task, Usage } from "./types.js";
 
 export interface CallOutcome {
   usage: Usage;
-  billedCostUSD: number | null;
+  /** Sum of the response's own cost_usd_* fields — the price the API itself reported. null when absent (direct OpenAI). */
+  apiReportedCostUSD: number | null;
   latencyMs: number;
   finishReason: string;
   text: string;
@@ -217,7 +218,7 @@ export async function callOpenAICompatible(
   const choice = (json.choices as { message?: { content?: string }; finish_reason?: string }[] | undefined)?.[0];
   return {
     usage: normalizeOpenAIUsage(usage),
-    billedCostUSD: billedFromUsage(usage as Record<string, unknown>),
+    apiReportedCostUSD: billedFromUsage(usage as Record<string, unknown>),
     latencyMs,
     finishReason: choice?.finish_reason ?? "unknown",
     text: choice?.message?.content ?? "",

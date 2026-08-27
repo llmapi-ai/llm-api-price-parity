@@ -49,16 +49,16 @@ export function renderConsole(summaries: PairSummary[], prices: PriceTable, repe
         String(side.medInput),
         String(side.medOutput),
         side.medReasoning > 0 ? yellow(String(side.medReasoning)) : dim("0"),
-        money(side.medCost),
-        side.medBilled === null ? dim("—") : money(side.medBilled),
+        side.medCost === null ? dim("—") : money(side.medCost),
         first ? "" : colorDelta(s.costDeltaPct),
+        first ? "" : colorDelta(s.tokenDeltaPct),
         `${Math.round(side.medLatencyMs)}ms`,
       ]);
     }
   }
   out.push(
     renderTable(
-      ["model", "task", "via", "in", "out", "reasoning", "$ computed", "$ billed", "Δ cost", "latency"],
+      ["model", "task", "via", "in", "out", "reasoning", "$ computed", "Δ cost", "Δ tokens", "latency"],
       rows,
     ),
   );
@@ -66,11 +66,8 @@ export function renderConsole(summaries: PairSummary[], prices: PriceTable, repe
 
   for (const s of summaries) {
     const name = `${s.matchup} × ${s.task}`;
-    out.push(verdictLine(s.costParity, `${name}: cost parity`, `gateway costs ${pct(s.costDeltaPct)} vs direct for the same request`));
+    out.push(verdictLine(s.costParity, `${name}: cost parity`, s.gateway.medCost === null ? "gateway response carried no cost_usd_* fields (unpriced request)" : `gateway response cost is ${pct(s.costDeltaPct)} vs direct list price`));
     out.push(verdictLine(s.reasoningParity, `${name}: reasoning parity`, "reasoning is on for one side and off for the other (a hidden-default mismatch)"));
-    if (s.billingParity !== null) {
-      out.push(verdictLine(s.billingParity, `${name}: billing parity`, "gateway billed cost exceeds published per-token rates (a markup)"));
-    }
     if (s.tokenDrift) {
       out.push(dim(`  · ${name}: token counts drift between the two API surfaces (informational; gateway is ${pct(s.costDeltaPct)} on cost)`));
     }
@@ -80,12 +77,10 @@ export function renderConsole(summaries: PairSummary[], prices: PriceTable, repe
   }
   out.push("");
 
-  const allPass = summaries.every(
-    (s) => s.costParity && s.reasoningParity && s.billingParity !== false && !s.truncated,
-  );
+  const allPass = summaries.every((s) => s.costParity && s.reasoningParity && !s.truncated);
   out.push(
     allPass
-      ? green(bold("  ✓ PARITY — gateway is at or below direct-provider cost, billed at published rates"))
+      ? green(bold("  ✓ PARITY — the cost the gateway reports is at or below the direct provider's list price"))
       : red(bold("  ✗ DIVERGENCE — see failing checks above")),
   );
   out.push("");
@@ -118,12 +113,12 @@ export function renderMarkdown(
   lines.push(`- reasoning_effort (OpenAI-family): \`${reasoningEffort}\``);
   lines.push(`- Prices pinned: ${prices.retrieved} (${Object.values(prices.sources).join(", ")})`);
   lines.push("");
-  lines.push("| model | task | via | input | output | reasoning | $ computed | $ billed | Δ cost |");
+  lines.push("| model | task | via | input | output | reasoning | $ computed | Δ cost | Δ tokens |");
   lines.push("|---|---|---|---:|---:|---:|---:|---:|---:|");
   for (const s of summaries) {
     for (const [label, side] of [["direct", s.direct], ["gateway", s.gateway]] as const) {
       lines.push(
-        `| ${s.matchup} | ${s.task} | ${label} | ${side.medInput} | ${side.medOutput} | ${side.medReasoning} | ${money(side.medCost)} | ${side.medBilled === null ? "—" : money(side.medBilled)} | ${label === "gateway" ? pct(s.costDeltaPct) : ""} |`,
+        `| ${s.matchup} | ${s.task} | ${label} | ${side.medInput} | ${side.medOutput} | ${side.medReasoning} | ${side.medCost === null ? "—" : money(side.medCost)} | ${label === "gateway" ? pct(s.costDeltaPct) : ""} | ${label === "gateway" ? pct(s.tokenDeltaPct) : ""} |`,
       );
     }
   }
@@ -132,11 +127,8 @@ export function renderMarkdown(
   lines.push("");
   for (const s of summaries) {
     const name = `${s.matchup} × ${s.task}`;
-    lines.push(`- ${s.costParity ? "✅" : "❌"} \`${name}\` cost parity (gateway ${pct(s.costDeltaPct)} vs direct)`);
+    lines.push(`- ${s.costParity ? "✅" : "❌"} \`${name}\` cost parity (gateway response cost ${pct(s.costDeltaPct)} vs direct list)`);
     lines.push(`- ${s.reasoningParity ? "✅" : "❌"} \`${name}\` reasoning parity (no on/off mismatch)`);
-    if (s.billingParity !== null) {
-      lines.push(`- ${s.billingParity ? "✅" : "❌"} \`${name}\` billing parity (gateway billed at or below published rates)`);
-    }
     if (s.tokenDrift) lines.push(`- ℹ️ \`${name}\` token counts drift between API surfaces (informational)`);
     if (s.truncated) lines.push(`- ⚠️ \`${name}\` had truncated runs`);
   }
