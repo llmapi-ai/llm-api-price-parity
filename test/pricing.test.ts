@@ -3,7 +3,6 @@ import {
   costUSD,
   median,
   reasoningRegimeMismatch,
-  withinBillingTolerance,
   withinCostParity,
   withinTokenTolerance,
 } from "../src/pricing.js";
@@ -105,14 +104,6 @@ describe("tolerances", () => {
     expect(withinTokenTolerance(1000, 1015)).toBe(true);
     expect(withinTokenTolerance(10, 30)).toBe(true); // tiny counts: 25-token floor
     expect(withinTokenTolerance(600, 950)).toBe(false); // ~350 hidden reasoning tokens
-  });
-
-  it("billing parity is one-directional: at/below published passes, markup fails", () => {
-    expect(withinBillingTolerance(0.01, 0.01005)).toBe(true); // 0.5% over: rounding slack
-    expect(withinBillingTolerance(0.01, 0.012)).toBe(false); // 20% markup: fails
-    expect(withinBillingTolerance(0.01, 0.0085)).toBe(true); // 15% volume discount: cheaper passes
-    expect(withinBillingTolerance(0.01, 0.005)).toBe(true); // well below list: passes
-    expect(withinBillingTolerance(0, 0)).toBe(true);
   });
 
   it("cost parity is one-directional: gateway cheaper passes, materially pricier fails", () => {

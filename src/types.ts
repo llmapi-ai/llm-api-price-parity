@@ -61,10 +61,14 @@ export interface RunResult {
   repeat: number;
   latencyMs: number;
   usage: Usage;
-  /** Cost computed by US from usage × prices.json — same math for both sides. */
-  computedCostUSD: number;
-  /** Cost the gateway claims it billed (sum of usage.cost_usd_* fields), if present. */
-  billedCostUSD: number | null;
+  /**
+   * direct: cost computed by the TEST from usage tokens × prices.json list rates.
+   * gateway: the cost the gateway's response itself reports — the sum of its
+   * usage.cost_usd_* fields, i.e. the actual price the API showed for this
+   * request. null when the gateway omitted the cost fields (an unpriced
+   * request — itself a finding, surfaced as a cost-parity failure).
+   */
+  computedCostUSD: number | null;
   finishReason: string;
   truncated: boolean;
   requestBody: Record<string, unknown>;
@@ -77,8 +81,8 @@ export interface SideStats {
   medCached: number;
   medOutput: number;
   medReasoning: number;
-  medCost: number;
-  medBilled: number | null;
+  /** Median of computedCostUSD; null when no run produced a cost (gateway omitted cost fields). */
+  medCost: number | null;
   medLatencyMs: number;
 }
 
@@ -87,14 +91,14 @@ export interface PairSummary {
   task: string;
   direct: SideStats;
   gateway: SideStats;
-  /** (gateway computed cost − direct computed cost) / direct, in % */
+  /** (gateway response cost − direct list cost) / direct, in % — a discount shows as negative. */
   costDeltaPct: number;
-  /** Gateway is not materially more expensive than direct (one-directional). */
+  /** ((gateway in+out tokens) − (direct in+out tokens)) / direct, in % — generation-length drift. */
+  tokenDeltaPct: number;
+  /** Gateway's reported cost is not materially above direct list price (one-directional). */
   costParity: boolean;
   /** No categorical reasoning on/off mismatch between the two sides. */
   reasoningParity: boolean;
-  /** null when the gateway did not report billed cost */
-  billingParity: boolean | null;
   /**
    * Informational only: raw token counts drifted beyond noise between the two
    * sides. Both call the same chat.completions API, so small jitter is expected
